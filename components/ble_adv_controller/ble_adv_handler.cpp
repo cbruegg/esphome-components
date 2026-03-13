@@ -161,6 +161,8 @@ void BleAdvHandler::setup() {
 #endif
 }
 
+float BleAdvHandler::get_setup_priority() const { return setup_priority::BLUETOOTH; }
+
 void BleAdvHandler::add_encoder(BleAdvEncoder * encoder) { 
   BleAdvMultiEncoder * enc_all = nullptr;
   auto all_enc = std::find_if(this->encoders_.begin(), this->encoders_.end(), 
@@ -368,6 +370,9 @@ void BleAdvHandler::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_
 #endif
 
 void BleAdvHandler::loop() {
+  if (esp32_ble::global_ble == nullptr || !esp32_ble::global_ble->is_active()) {
+    return;
+  }
   if (this->adv_stop_time_ == 0) {
     // No packet is being advertised, process with clean-up IF already processed once and requested for removal
     this->packets_.remove_if([&](BleAdvProcess & p){ return p.processed_once_ && p.to_be_removed_; } );

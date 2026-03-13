@@ -205,6 +205,7 @@ public:
   // component handling
   void setup() override;
   void loop() override;
+  float get_setup_priority() const override;
 #ifdef ESPHOME_ESP32_BLE_GAP_EVENT_HANDLER_COUNT
   void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) override;
 #endif
