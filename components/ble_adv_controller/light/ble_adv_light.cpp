@@ -14,7 +14,7 @@ void BleAdvLight::set_min_brightness(int min_brightness, int min, int max, int s
   this->number_min_brightness_.traits.set_min_value(min);
   this->number_min_brightness_.traits.set_max_value(max);
   this->number_min_brightness_.traits.set_step(step);
-  this->number_min_brightness_.state = min_brightness; 
+  this->number_min_brightness_.publish_state(min_brightness);
 }
 
 void BleAdvLight::set_traits(float cold_white_temperature, float warm_white_temperature) {
@@ -119,4 +119,3 @@ void BleAdvSecLight::write_state(light::LightState *state) {
 
 } // namespace bleadvcontroller
 } // namespace esphome
-

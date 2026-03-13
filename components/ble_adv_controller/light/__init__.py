@@ -16,6 +16,7 @@ from .. import (
     ENTITY_BASE_CONFIG_SCHEMA,
     entity_base_code_gen,
     BleAdvEntity,
+    CORE,
 )
 
 from ..const import (
@@ -62,6 +63,7 @@ async def to_code(config):
     if CONF_BLE_ADV_SECONDARY in config:
         cg.add(var.set_traits())
     else:
+        CORE.register_platform_component("number", var)
         cg.add(var.set_traits(config[CONF_COLD_WHITE_COLOR_TEMPERATURE], config[CONF_WARM_WHITE_COLOR_TEMPERATURE]))
         cg.add(var.set_constant_brightness(config[CONF_CONSTANT_BRIGHTNESS]))
         cg.add(var.set_split_dim_cct(config[CONF_BLE_ADV_SPLIT_DIM_CCT]))
