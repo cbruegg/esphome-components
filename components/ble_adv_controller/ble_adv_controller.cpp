@@ -26,7 +26,7 @@ void BleAdvSelect::sub_init() {
       }
     }
   }
-  if (!this->traits.get_options().empty()) {
+  if (!this->has_state() && !this->traits.get_options().empty()) {
     this->publish_state((size_t) 0);
   }
 }
