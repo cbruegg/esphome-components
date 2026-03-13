@@ -3,6 +3,7 @@
 #include "esphome/core/defines.h"
 #include "esphome/core/component.h"
 #include "esphome/core/helpers.h"
+#include "esphome/components/esp32_ble/ble.h"
 #ifdef USE_API
 #include "esphome/components/api/custom_api_device.h"
 #endif
@@ -193,6 +194,9 @@ protected:
     with handling of prioritization and parallel send when possible
  */
 class BleAdvHandler: public Component
+#ifdef ESPHOME_ESP32_BLE_GAP_EVENT_HANDLER_COUNT
+  , public esp32_ble::GAPEventHandler
+#endif
 #ifdef USE_API
   , public api::CustomAPIDevice
 #endif
@@ -201,6 +205,9 @@ public:
   // component handling
   void setup() override;
   void loop() override;
+#ifdef ESPHOME_ESP32_BLE_GAP_EVENT_HANDLER_COUNT
+  void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) override;
+#endif
 
   // Encoder registration and access
   void add_encoder(BleAdvEncoder * encoder);
@@ -233,6 +240,9 @@ protected:
   std::list< BleAdvProcess > packets_;
   uint16_t id_count = 1;
   uint32_t adv_stop_time_ = 0;
+  bool adv_config_pending_{false};
+  bool adv_stop_pending_{false};
+  bool adv_active_{false};
 
   esp_ble_adv_params_t adv_params_ = {
     .adv_int_min = 0x20,

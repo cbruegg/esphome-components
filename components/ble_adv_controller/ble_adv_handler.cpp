@@ -154,6 +154,11 @@ void BleAdvHandler::setup() {
 #ifdef USE_API
   register_service(&BleAdvHandler::on_raw_decode, "raw_decode", {"raw"});
 #endif
+#ifdef ESPHOME_ESP32_BLE_GAP_EVENT_HANDLER_COUNT
+  if (esp32_ble::global_ble != nullptr) {
+    esp32_ble::global_ble->register_gap_event_handler(this);
+  }
+#endif
 }
 
 void BleAdvHandler::add_encoder(BleAdvEncoder * encoder) { 
@@ -305,17 +310,76 @@ void BleAdvHandler::capture(const esp32_ble_tracker::ESPBTDevice & device, bool 
 }
 #endif
 
+#ifdef ESPHOME_ESP32_BLE_GAP_EVENT_HANDLER_COUNT
+void BleAdvHandler::gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
+  switch (event) {
+    case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT: {
+      if (!this->adv_config_pending_) {
+        break;
+      }
+      this->adv_config_pending_ = false;
+      auto err = esp_ble_gap_start_advertising(&(this->adv_params_));
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ble_gap_start_advertising failed: %s", esp_err_to_name(err));
+        this->adv_stop_time_ = 0;
+      }
+      break;
+    }
+    case ESP_GAP_BLE_ADV_START_COMPLETE_EVT: {
+      if (param->adv_start_cmpl.status != ESP_BT_STATUS_SUCCESS) {
+        ESP_LOGE(TAG, "BLE adv start failed: %s", esp_err_to_name(param->adv_start_cmpl.status));
+        this->adv_stop_time_ = 0;
+        break;
+      }
+      if (this->packets_.empty()) {
+        this->adv_stop_time_ = 0;
+        break;
+      }
+      this->adv_active_ = true;
+      this->adv_stop_time_ = millis() + this->packets_.front().param_.duration_;
+      this->packets_.front().processed_once_ = true;
+      break;
+    }
+    case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT: {
+      this->adv_active_ = false;
+      this->adv_stop_pending_ = false;
+      this->adv_stop_time_ = 0;
+      if (param->adv_stop_cmpl.status != ESP_BT_STATUS_SUCCESS) {
+        ESP_LOGE(TAG, "BLE adv stop failed: %s", esp_err_to_name(param->adv_stop_cmpl.status));
+        break;
+      }
+      if (this->packets_.empty()) {
+        break;
+      }
+      bool front_to_be_removed = this->packets_.front().to_be_removed_;
+      bool multi_packets = (this->packets_.size() > 1);
+      if (front_to_be_removed) {
+        this->packets_.pop_front();
+      } else if (multi_packets) {
+        this->packets_.emplace_back(std::move(this->packets_.front()));
+        this->packets_.pop_front();
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+#endif
+
 void BleAdvHandler::loop() {
   if (this->adv_stop_time_ == 0) {
     // No packet is being advertised, process with clean-up IF already processed once and requested for removal
     this->packets_.remove_if([&](BleAdvProcess & p){ return p.processed_once_ && p.to_be_removed_; } );
     // if packets to be advertised, advertise the front one
-    if (!this->packets_.empty()) {
+    if (!this->packets_.empty() && !this->adv_config_pending_ && !this->adv_stop_pending_ && !this->adv_active_) {
       BleAdvParam & packet = this->packets_.front().param_;
-      ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ble_gap_config_adv_data_raw(packet.get_full_buf(), packet.get_full_len()));
-      ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ble_gap_start_advertising(&(this->adv_params_)));
-      this->adv_stop_time_ = millis() + this->packets_.front().param_.duration_;
-      this->packets_.front().processed_once_ = true;
+      auto err = esp_ble_gap_config_adv_data_raw(packet.get_full_buf(), packet.get_full_len());
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ble_gap_config_adv_data_raw failed: %s", esp_err_to_name(err));
+      } else {
+        this->adv_config_pending_ = true;
+      }
     }
   } else {
     // Packet is being advertised, check if time to switch to next one in case:
@@ -323,14 +387,15 @@ void BleAdvHandler::loop() {
     // There is more than one packet to advertise OR the front packet was requested to be removed
     bool multi_packets = (this->packets_.size() > 1);
     bool front_to_be_removed = this->packets_.front().to_be_removed_;
-    if ((millis() > this->adv_stop_time_) && (multi_packets || front_to_be_removed)) {
-      ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ble_gap_stop_advertising());
-      this->adv_stop_time_ = 0;
-      if (front_to_be_removed) {
-        this->packets_.pop_front();
-      } else if (multi_packets) {
-        this->packets_.emplace_back(std::move(this->packets_.front()));
-        this->packets_.pop_front();
+    if ((millis() > this->adv_stop_time_) && (multi_packets || front_to_be_removed) && this->adv_active_ &&
+        !this->adv_stop_pending_) {
+      auto err = esp_ble_gap_stop_advertising();
+      if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ble_gap_stop_advertising failed: %s", esp_err_to_name(err));
+        this->adv_active_ = false;
+        this->adv_stop_time_ = 0;
+      } else {
+        this->adv_stop_pending_ = true;
       }
     }
   }
