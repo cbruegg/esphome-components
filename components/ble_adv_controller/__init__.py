@@ -1,5 +1,6 @@
 import esphome.codegen as cg
 import esphome.config_validation as cv
+from esphome.components import esp32_ble
 from esphome.core import ID
 from esphome.core import CORE
 from esphome.const import (
@@ -30,7 +31,7 @@ bleadvcontroller_ns = cg.esphome_ns.namespace('bleadvcontroller')
 BleAdvController = bleadvcontroller_ns.class_('BleAdvController', cg.Component, cg.EntityBase)
 BleAdvEncoder = bleadvcontroller_ns.class_('BleAdvEncoder')
 BleAdvMultiEncoder = bleadvcontroller_ns.class_('BleAdvMultiEncoder', BleAdvEncoder)
-BleAdvHandler = bleadvcontroller_ns.class_('BleAdvHandler', cg.Component)
+BleAdvHandler = bleadvcontroller_ns.class_('BleAdvHandler', cg.Component, esp32_ble.GAPEventHandler)
 BleAdvEntity = bleadvcontroller_ns.class_('BleAdvEntity', cg.Component)
 
 FanLampEncoderV1 = bleadvcontroller_ns.class_('FanLampEncoderV1')
@@ -253,12 +254,14 @@ async def entity_base_code_gen(var, config, platform):
 class BleAdvRegistry:
     handler = None
     @classmethod
-    def get(cls):
+    async def get(cls):
         if not cls.handler:
             hdl_id = ID("ble_adv_static_handler", type=BleAdvHandler)
             cls.handler = cg.new_Pvariable(hdl_id)
             cg.add(cls.handler.set_component_source(cg.LogStringLiteral("ble_adv_handler")))
             cg.add(cg.App.register_component(cls.handler))
+            ble = await cg.get_variable(ID("esp32_ble_esp32ble_id", type=esp32_ble.ESP32BLE))
+            esp32_ble.register_gap_event_handler(ble, cls.handler)
             for encoding, params in BLE_ADV_ENCODERS.items():
                 for variant, param_variant in params["variants"].items():
                     if "class" in param_variant:
@@ -270,7 +273,7 @@ class BleAdvRegistry:
         return cls.handler
 
 async def to_code(config):
-    hdl = BleAdvRegistry.get()
+    hdl = await BleAdvRegistry.get()
     var = cg.new_Pvariable(config[CONF_ID])
     CORE.register_platform_component("select", var)
     CORE.register_platform_component("number", var)

@@ -155,9 +155,6 @@ void BleAdvHandler::setup() {
   register_service(&BleAdvHandler::on_raw_decode, "raw_decode", {"raw"});
 #endif
 #ifdef ESPHOME_ESP32_BLE_GAP_EVENT_HANDLER_COUNT
-  if (esp32_ble::global_ble != nullptr) {
-    esp32_ble::global_ble->register_gap_event_handler(this);
-  }
 #endif
 }
 
